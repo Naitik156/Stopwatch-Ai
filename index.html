@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="description" content="FocusMirror is a smart study timer that uses webcam AI to auto-pause when you're distracted. Boost your productivity with face detection and focus tracking.">
+  <meta name="keywords" content="smart study timer, focus app, AI face detection, student productivity, focus tracker, webcam timer, faceapi.js">
+  <meta name="author" content="FocusMirror AI Timer">
+  <title>FocusMirror – Smart AI Study Timer</title>
+
+  <!-- Google AdSense Integration -->
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3961468388804028" crossorigin="anonymous"></script>
+
+  <!-- face-api.js for face detection -->
+  <script defer src="https://unpkg.com/face-api.js@0.22.2/dist/face-api.min.js"></script>
+
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #e3f2fd;
+      color: #333;
+    }
+
+    header {
+      background: #0288d1;
+      padding: 20px;
+      text-align: center;
+      color: white;
+    }
+
+    .container {
+      max-width: 700px;
+      margin: 20px auto;
+      padding: 20px;
+      text-align: center;
+      background: #ffffff;
+      border-radius: 10px;
+      box-shadow: 0 0 12px rgba(0,0,0,0.1);
+    }
+
+    .timer {
+      font-size: 4rem;
+      font-family: monospace;
+      margin: 20px 0;
+      background: #f1f8ff;
+      padding: 20px;
+      border-radius: 10px;
+    }
+
+    button {
+      padding: 12px 24px;
+      margin: 8px;
+      border: none;
+      border-radius: 8px;
+      background: #0277bd;
+      color: white;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #01579b;
+    }
+
+    label {
+      display: block;
+      margin: 20px 0;
+    }
+
+    #focusScore, #dailyReport {
+      margin-top: 20px;
+      font-size: 1.1rem;
+      font-weight: 500;
+    }
+
+    video {
+      display: none;
+    }
+
+    /* Ad Space */
+    .ad-container {
+      margin-top: 40px;
+      text-align: center;
+    }
+
+    .adsbygoogle {
+      display: block;
+      margin: auto;
+      width: 100%;
+      max-width: 728px;
+      height: 90px;
+    }
+
+    @media screen and (max-width: 768px) {
+      .timer {
+        font-size: 2.8rem;
+      }
+
+      .adsbygoogle {
+        height: 60px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>FocusMirror – Smart Study Timer</h1>
+</header>
+
+<div class="container">
+  <div class="timer" id="timer">00:00:00</div>
+
+  <button onclick="startTimer()">Start</button>
+  <button onclick="pauseTimer()">Pause</button>
+  <button onclick="resetTimer()">Reset</button>
+  <button onclick="showReport()">View Daily Report</button>
+
+  <label>
+    <input type="checkbox" id="focusToggle" onchange="toggleFocusMode()">
+    Enable Smart Focus Mode
+  </label>
+
+  <div id="focusScore">Focus Score: 0%</div>
+  <div id="dailyReport"></div>
+
+  <video id="video" autoplay muted playsinline></video>
+
+  <!-- AdSense Ad Unit -->
+  <div class="ad-container">
+    <ins class="adsbygoogle"
+         data-ad-client="ca-pub-3961468388804028"
+         data-ad-slot="1234567890"
+         data-ad-format="auto"
+         data-full-width-responsive="true"></ins>
+    <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+  </div>
+</div>
+
+<script>
+  let timer = 0, interval, running = false;
+  let focusedSeconds = 0, faceVisible = true;
+  let missedFrames = 0, focusMode = false;
+  let longestSession = 0;
+
+  function formatTime(s) {
+    const h = String(Math.floor(s / 3600)).padStart(2, '0');
+    const m = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
+    const sec = String(s % 60).padStart(2, '0');
+    return `${h}:${m}:${sec}`;
+  }
+
+  function updateDisplay() {
+    document.getElementById('timer').textContent = formatTime(timer);
+    const score = timer > 0 ? Math.floor((focusedSeconds / timer) * 100) : 0;
+    document.getElementById('focusScore').textContent = `Focus Score: ${score}%`;
+  }
+
+  function startTimer() {
+    if (running) return;
+    running = true;
+    interval = setInterval(() => {
+      timer++;
+      if (faceVisible || !focusMode) focusedSeconds++;
+      updateDisplay();
+    }, 1000);
+  }
+
+  function pauseTimer() {
+    clearInterval(interval);
+    running = false;
+  }
+
+  function resetTimer() {
+    pauseTimer();
+    if (timer > longestSession) longestSession = timer;
+    saveData();
+    timer = 0;
+    focusedSeconds = 0;
+    updateDisplay();
+  }
+
+  function toggleFocusMode() {
+    focusMode = document.getElementById('focusToggle').checked;
+    if (focusMode) initCamera();
+  }
+
+  function saveData() {
+    const today = new Date().toISOString().split("T")[0];
+    const data = JSON.parse(localStorage.getItem(today)) || { total: 0, longest: 0 };
+    data.total += focusedSeconds;
+    data.longest = Math.max(data.longest, longestSession);
+    localStorage.setItem(today, JSON.stringify(data));
+  }
+
+  function showReport() {
+    const today = new Date().toISOString().split("T")[0];
+    const data = JSON.parse(localStorage.getItem(today)) || { total: 0, longest: 0 };
+    const avgScore = data.total && timer ? Math.floor((data.total / timer) * 100) : 0;
+    document.getElementById('dailyReport').innerText =
+      `Today's Focus: ${formatTime(data.total)}\nLongest Session: ${formatTime(data.longest)}\nAverage Score: ${avgScore}%`;
+  }
+
+  async function initCamera() {
+    const video = document.getElementById("video");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      video.srcObject = stream;
+      await faceapi.nets.tinyFaceDetector.loadFromUri("https://unpkg.com/face-api.js@0.22.2/models");
+
+      setInterval(async () => {
+        if (!focusMode || !running) return;
+        const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions());
+        if (detection) {
+          faceVisible = true;
+          missedFrames = 0;
+        } else {
+          missedFrames++;
+          if (missedFrames >= 5) {
+            faceVisible = false;
+            pauseTimer();
+            alert("No face detected. Timer paused.");
+          }
+        }
+      }, 1000);
+    } catch (e) {
+      alert("Camera access is required for Smart Focus Mode.");
+    }
+  }
+</script>
+
+</body>
+</html>
